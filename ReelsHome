@@ -1,0 +1,96 @@
+//
+//  ReelsHome.swift
+//  BossNation
+//
+//  Created by Rachelle Ford on 6/5/23.
+//
+
+import SwiftUI
+
+struct ReelsHome: View {
+    init(){
+        UITabBar.appearance().isHidden = true
+    }
+    @State var currentTab: Tab = .reelsHome
+    @State var createVideo: Bool = false
+    @StateObject var reelsHomeModel: ReelsHomeViewModel = .init()
+    
+    @SceneStorage("create_video") var isNewVideo: Bool = false
+    @SceneStorage("new_video_id") var newVideoID: String = ""
+    var body: some View {
+        VStack(spacing: 0){
+            TabView(selection: $currentTab){
+                NavigationView{
+                    ReelsFeed()
+                    .environmentObject(reelsHomeModel)
+                    .navigationBarHidden(true)
+                }
+                .tag(Tab.reelsHome)
+                
+                NavigationView{
+                    ReelsSettings()
+                        .navigationTitle("Profile")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+                .tag(Tab.reelsSettings)
+            }
+            
+            HStack(spacing: 0){
+                ForEach(Tab.allCases,id: \.self){tab in
+                    TabBarButton(tab: tab)
+                }
+            }
+            .overlay(content: {
+                Button {
+                    isNewVideo = true
+                    createVideo.toggle()
+                } label: {
+                    Image("Add")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 45, height: 45)
+                }
+            })
+            .padding(.top,15)
+            .overlay(Divider(),alignment: .top)
+            .background(.black)
+            .transition(.move(edge: .bottom))
+        }
+        .preferredColorScheme(.dark)
+        .fullScreenCover(isPresented: $createVideo) {
+            NewRecording()
+        }
+        .onChange(of: isNewVideo) { newValue in
+            if !newValue{createVideo = false}
+        }
+        .onChange(of: newVideoID) { newValue in
+            if newValue != ""{
+                Task{
+                    await reelsHomeModel.fetchVideo(id: newValue)
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    func TabBarButton(tab: Tab)->some View{
+        Button {
+            if currentTab == .reelsHome && tab == .reelsHome{
+                reelsHomeModel.finishFetching = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    reelsHomeModel.feeds = []
+                    Task{try? await reelsHomeModel.fetchFeeds()}
+                }
+            }
+            currentTab = tab
+        } label: {
+            Image(tab.rawValue)
+                .resizable()
+                .renderingMode(.template)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 25, height: 25)
+                .foregroundColor(currentTab == tab ? .primary : .gray)
+                .frame(maxWidth: .infinity)
+        }
+    }
+}
