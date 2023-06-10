@@ -1,0 +1,133 @@
+//
+//  VideoPreview.swift
+//  BossNation
+//
+//  Created by Rachelle Ford on 6/5/23.
+//
+
+import SwiftUI
+import AVKit
+
+struct VideoPreview: View{
+    var url: URL
+    @Binding var showPreview: Bool
+    var body: some View{
+        NavigationView{
+            GeometryReader{proxy in
+                let size = proxy.size
+                let player = AVPlayer(url: url)
+                CustomVideoPlayer(player: player)
+                    .frame(width: size.width, height: size.height)
+                    .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                    // MARK: Back Button
+                    .overlay(alignment: .topLeading) {
+                        Button {
+                            showPreview.toggle()
+                        } label: {
+                            Label {
+                                Text("Back")
+                            } icon: {
+                                Image(systemName: "chevron.left")
+                            }
+                            .foregroundColor(.white)
+                        }
+                        .padding(.leading)
+                        .padding(.top,22)
+                    }
+                    .overlay(alignment: .bottomTrailing) {
+                        NavigationLink("Publish"){
+                            NewPostView(videoURL: url)
+                        }
+                        .foregroundColor(.black)
+                        .tint(.white)
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                        .padding()
+                    }
+                    .onAppear {player.play()}
+                    .onDisappear{player.pause()}
+            }
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+struct NewPostView: View{
+    init(videoURL: URL){
+        self.videoURL = videoURL
+        UITextView.appearance().backgroundColor = .clear
+    }
+    var videoURL: URL
+    @StateObject var publisherModel: PublisherViewModel = .init()
+    @FocusState var isTyping: Bool
+    
+    @SceneStorage("create_video") var isNewVideo: Bool = false
+    @SceneStorage("new_video_id") var newVideoID: String = ""
+    
+    var body: some View{
+        VStack(spacing: 10){
+            HStack(spacing: 12){
+                VideoThumbnail(videoURL: videoURL)
+                    .frame(width: 120,height: 180)
+                
+                TextEditor(text: $publisherModel.caption)
+                    .focused($isTyping)
+                    .background(alignment: .topLeading) {
+                        Text("Write a Caption")
+                            .foregroundColor(.gray.opacity(0.6))
+                            .opacity(isTyping || publisherModel.caption != "" ? 0 : 1)
+                            .padding(4)
+                            .padding(.top,4)
+                    }
+                    .frame(height: 180)
+            }
+            .frame(maxWidth: .infinity,alignment: .leading)
+            .padding(.top,10)
+            
+            Divider()
+            
+            Button(action: {
+                publisherModel.isLoading = true
+                Task{
+                    await publisherModel.uploadVideo(url: videoURL){docID in
+                        newVideoID = docID
+                        isNewVideo = false
+                    }
+                }
+            }, label: {
+                Text("Share Video")
+                    .foregroundColor(.white)
+                    .padding(.vertical,12)
+                    .frame(maxWidth: .infinity)
+                    .opacity(publisherModel.isLoading ? 0 : 1)
+                    .overlay(content: {
+                        if publisherModel.isLoading{
+                            ProgressView()
+                        }
+                    })
+                    .background{
+                        Rectangle()
+                            .fill(.blue)
+                    }
+            })
+            .disabled(publisherModel.caption == "")
+            .opacity(publisherModel.caption == "" ? 0.6 : 1)
+            .padding()
+            .frame(maxHeight: .infinity,alignment: .bottom)
+        }
+        .navigationTitle("New Post")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem {
+                if isTyping{
+                    Button("Done"){
+                        isTyping = false
+                    }
+                }
+            }
+        }
+        .disabled(publisherModel.isLoading)
+        .opacity(publisherModel.isLoading ? 0.6 : 1)
+        .alert(publisherModel.errorMsg, isPresented: $publisherModel.showError) {}
+    }
+}
